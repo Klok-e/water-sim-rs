@@ -6,10 +6,12 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-use components::{Cell, SimDataWrap, Simulation, GRID_SIZE};
+use components::{Cell, Simulation};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
 use ndarray::Array2;
 use rand::Rng;
+
+const GRID_SIZE: u32 = 512;
 
 fn main() {
     App::new()
@@ -30,7 +32,7 @@ fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut rng = rand::thread_rng();
     for y in 0..GRID_SIZE {
         for x in 0..GRID_SIZE {
-            let fill = rng.gen::<u8>();
+            let fill = rng.gen::<f32>();
             data[[x as usize, y as usize]] = Cell::Water { fill };
         }
     }
@@ -53,7 +55,8 @@ fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             ..default()
         })
         .insert(Simulation {
-            data: SimDataWrap(data),
+            data: data.clone(),
+            double_buffer: data,
         });
 }
 
@@ -68,7 +71,7 @@ fn update_texture(
         let mut image_data = Vec::new();
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
-                let col = sim.data.get([x as usize, y as usize]).color();
+                let col = sim.data[[x as usize, y as usize]].color();
                 let col = col.as_rgba_u32();
                 let bytes: [u8; 4] = col.to_le_bytes();
                 image_data.push(bytes[2]);
@@ -85,55 +88,100 @@ fn update_texture(
 fn simulate(mut query: Query<(&mut Simulation,)>) {
     for (sim,) in &mut query {
         let sim: &mut Simulation = sim.into_inner();
-        let mut double_buffer = sim.data.clone();
-
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
-                rule(&mut sim.data, &mut double_buffer, [x as i32, y as i32]);
+                let mut state = [[Cell::Solid; 3]; 3];
+
+                for yy in -1..=1 {
+                    for xx in -1..=1 {
+                        let pos_x = x as i32 + xx;
+                        let pos_y = y as i32 + yy;
+                        let value = if pos_x < 0
+                            || pos_x >= GRID_SIZE as i32
+                            || pos_y < 0
+                            || pos_y >= GRID_SIZE as i32
+                        {
+                            Cell::Solid
+                        } else {
+                            *sim.data.get([pos_x as usize, pos_y as usize]).unwrap()
+                        };
+                        state[(xx + 1) as usize][(yy + 1) as usize] = value;
+                    }
+                }
+
+                sim.double_buffer[[x as usize, y as usize]] = rule(state);
             }
         }
 
-        std::mem::swap(&mut sim.data, &mut double_buffer);
+        std::mem::swap(&mut sim.data, &mut sim.double_buffer);
     }
 }
 
-fn rule(state: &mut SimDataWrap, double_buffer: &mut SimDataWrap, pos: [i32; 2]) {
-    const MAX_FILL: u8 = 128;
+fn rule(state: [[Cell; 3]; 3]) -> Cell {
+    const MAX_FILL: f32 = 1.;
 
-    let mut curr_cell = state.get(pos);
+    let mut curr_cell = state[1][1];
 
     match &mut curr_cell {
         Cell::Solid => {}
         Cell::Water { fill } => {
             let mut new_fill = *fill;
-            if let Cell::Water { fill: below_fill } = state.get_mut([pos[0], pos[1] - 1]) {
-                let flows_down = (MAX_FILL - *below_fill).min(new_fill);
-                new_fill -= flows_down;
-                *below_fill += flows_down;
+            if let Cell::Water { fill: above_fill } = state[1][0] {
+                new_fill += (MAX_FILL - *fill).min(above_fill);
             }
 
-            match (state[0][1], state[2][1]) {
-                (Cell::Water { fill: left_fill }, Cell::Water { fill: right_fill }) => {
-                    if left_fill < *fill && *fill > right_fill {}
-                }
-                (Cell::Water { fill: left_fill }, Cell::Solid) => {
-                    let sum = *fill as u32 + left_fill as u32;
-                    let avg = sum / 2;
-                    let rem = sum % 2;
+            let mut flows_downwards = false;
+            if let Cell::Water { fill: below_fill } = state[1][2] {
+                let flows_down = (MAX_FILL - below_fill).min(*fill);
+                new_fill -= flows_down;
 
-                    new_fill = (avg + rem) as u8;
-                }
-                (Cell::Solid, Cell::Water { fill: right_fill }) => {
-                    let sum = *fill as u32 + right_fill as u32;
-                    let avg = sum / 2;
-                    let rem = sum % 2;
+                flows_downwards = flows_down > 0.;
+            }
 
-                    new_fill = (avg + rem) as u8;
+            if !flows_downwards {
+                match (state[0][1], state[2][1]) {
+                    (Cell::Water { fill: left_fill }, Cell::Water { fill: right_fill }) => {
+                        if left_fill > *fill {
+                            new_fill += (left_fill - *fill) / 2.;
+                        }
+
+                        if left_fill <= *fill {
+                            new_fill -= (left_fill - *fill) / 2.;
+                        }
+
+                        if right_fill > *fill {
+                            new_fill += (right_fill - *fill) / 2.;
+                        }
+
+                        if right_fill <= *fill {
+                            new_fill -= (right_fill - *fill) / 2.;
+                        }
+                    }
+                    (Cell::Water { fill: left_fill }, Cell::Solid) => {
+                        if left_fill > *fill {
+                            new_fill += (left_fill - *fill) / 2.;
+                        }
+
+                        if left_fill <= *fill {
+                            new_fill -= (left_fill - *fill) / 2.;
+                        }
+                    }
+                    (Cell::Solid, Cell::Water { fill: right_fill }) => {
+                        if right_fill > *fill {
+                            new_fill += (right_fill - *fill) / 2.;
+                        }
+
+                        if right_fill <= *fill {
+                            new_fill -= (right_fill - *fill) / 2.;
+                        }
+                    }
+                    (Cell::Solid, Cell::Solid) => {}
                 }
-                (Cell::Solid, Cell::Solid) => {}
             }
 
             *fill = new_fill;
         }
     }
+
+    curr_cell
 }
