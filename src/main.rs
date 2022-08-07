@@ -138,7 +138,7 @@ fn rule(state: [[Cell; 3]; 3]) -> Cell {
                 flows_downward = flows_down > 0;
             }
 
-            if flows_downward {
+            if !flows_downward {
                 match (state[0][1], state[2][1]) {
                     (Cell::Water { fill: left_fill }, Cell::Water { fill: right_fill }) => {
                         let sum = *fill as u32 + left_fill as u32 + right_fill as u32;
