@@ -6,12 +6,10 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
-use components::{Cell, Simulation};
+use components::{Cell, SimDataWrap, Simulation, GRID_SIZE};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
 use ndarray::Array2;
 use rand::Rng;
-
-const GRID_SIZE: u32 = 512;
 
 fn main() {
     App::new()
@@ -55,8 +53,7 @@ fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             ..default()
         })
         .insert(Simulation {
-            data: data.clone(),
-            double_buffer: data,
+            data: SimDataWrap(data),
         });
 }
 
@@ -71,7 +68,7 @@ fn update_texture(
         let mut image_data = Vec::new();
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
-                let col = sim.data[[x as usize, y as usize]].color();
+                let col = sim.data.get([x as usize, y as usize]).color();
                 let col = col.as_rgba_u32();
                 let bytes: [u8; 4] = col.to_le_bytes();
                 image_data.push(bytes[2]);
@@ -88,86 +85,55 @@ fn update_texture(
 fn simulate(mut query: Query<(&mut Simulation,)>) {
     for (sim,) in &mut query {
         let sim: &mut Simulation = sim.into_inner();
+        let mut double_buffer = sim.data.clone();
+
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
-                let mut state = [[Cell::Solid; 3]; 3];
-
-                for yy in -1..=1 {
-                    for xx in -1..=1 {
-                        let pos_x = x as i32 + xx;
-                        let pos_y = y as i32 + yy;
-                        let value = if pos_x < 0
-                            || pos_x >= GRID_SIZE as i32
-                            || pos_y < 0
-                            || pos_y >= GRID_SIZE as i32
-                        {
-                            Cell::Solid
-                        } else {
-                            *sim.data.get([pos_x as usize, pos_y as usize]).unwrap()
-                        };
-                        state[(xx + 1) as usize][(yy + 1) as usize] = value;
-                    }
-                }
-
-                sim.double_buffer[[x as usize, y as usize]] = rule(state);
+                rule(&mut sim.data, &mut double_buffer, [x as i32, y as i32]);
             }
         }
 
-        std::mem::swap(&mut sim.data, &mut sim.double_buffer);
+        std::mem::swap(&mut sim.data, &mut double_buffer);
     }
 }
 
-fn rule(state: [[Cell; 3]; 3]) -> Cell {
-    const MAX_FILL: u8 = 255;
+fn rule(state: &mut SimDataWrap, double_buffer: &mut SimDataWrap, pos: [i32; 2]) {
+    const MAX_FILL: u8 = 128;
 
-    let mut curr_cell = state[1][1];
+    let mut curr_cell = state.get(pos);
 
     match &mut curr_cell {
         Cell::Solid => {}
         Cell::Water { fill } => {
             let mut new_fill = *fill;
-            if let Cell::Water { fill: above_fill } = state[1][0] {
-                new_fill += (MAX_FILL - *fill).min(above_fill);
-            }
-
-            let mut flows_downward = false;
-            if let Cell::Water { fill: below_fill } = state[1][2] {
-                let flows_down = (MAX_FILL - below_fill).min(*fill);
+            if let Cell::Water { fill: below_fill } = state.get_mut([pos[0], pos[1] - 1]) {
+                let flows_down = (MAX_FILL - *below_fill).min(new_fill);
                 new_fill -= flows_down;
-
-                flows_downward = flows_down > 0;
+                *below_fill += flows_down;
             }
 
-            if !flows_downward {
-                match (state[0][1], state[2][1]) {
-                    (Cell::Water { fill: left_fill }, Cell::Water { fill: right_fill }) => {
-                        let sum = *fill as u32 + left_fill as u32 + right_fill as u32;
-                        let avg = sum / 3;
-                        let rem = sum % 3;
-
-                        new_fill = avg as u8;
-                    }
-                    (Cell::Water { fill: left_fill }, Cell::Solid) => {
-                        let sum = *fill as u32 + left_fill as u32;
-                        let avg = sum / 2;
-                        let rem = sum % 2;
-
-                        new_fill = (avg + rem) as u8;
-                    }
-                    (Cell::Solid, Cell::Water { fill: right_fill }) => {
-                        let sum = *fill as u32 + right_fill as u32;
-                        let avg = sum / 2;
-                        let rem = sum % 2;
-
-                        new_fill = (avg + rem) as u8;
-                    }
-                    (Cell::Solid, Cell::Solid) => {}
+            match (state[0][1], state[2][1]) {
+                (Cell::Water { fill: left_fill }, Cell::Water { fill: right_fill }) => {
+                    if left_fill < *fill && *fill > right_fill {}
                 }
+                (Cell::Water { fill: left_fill }, Cell::Solid) => {
+                    let sum = *fill as u32 + left_fill as u32;
+                    let avg = sum / 2;
+                    let rem = sum % 2;
+
+                    new_fill = (avg + rem) as u8;
+                }
+                (Cell::Solid, Cell::Water { fill: right_fill }) => {
+                    let sum = *fill as u32 + right_fill as u32;
+                    let avg = sum / 2;
+                    let rem = sum % 2;
+
+                    new_fill = (avg + rem) as u8;
+                }
+                (Cell::Solid, Cell::Solid) => {}
             }
 
             *fill = new_fill;
         }
     }
-
-    curr_cell
 }
