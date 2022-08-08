@@ -150,11 +150,11 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
         adj: i32,
     ) {
         if adjacent_fill < curr_water.fill && curr_water.fill > 0 {
-            let can_flow = curr_water.fill - adjacent_fill / 2;
+            let can_flow = ((curr_water.fill - adjacent_fill) / 2).max(1);
 
-            curr_water.fill -= 1;
-            changes[x][y] -= 1;
-            changes[(x as i32 + adj) as usize][y] += 1;
+            curr_water.fill -= can_flow;
+            changes[x][y] -= can_flow;
+            changes[(x as i32 + adj) as usize][y] += can_flow;
         }
     }
 
@@ -169,6 +169,14 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
         return changes;
     };
 
+    if let Cell::Water(WaterData { fill: _ }) = state[1][0] {
+        if curr_water.fill > MAX_FILL && curr_water.fill > 0 {
+            curr_water.fill -= 1;
+            changes[x][y] -= 1;
+            changes[x][y - 1] += 1;
+        }
+    }
+
     if let Cell::Water(WaterData { fill: below_fill }) = state[x][y + 1] {
         if below_fill < MAX_FILL && curr_water.fill > 0 {
             let flow_down = (MAX_FILL - below_fill).min(curr_water.fill);
@@ -178,14 +186,6 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
         }
     }
 
-    if let Cell::Water(WaterData { fill: _ }) = state[1][0] {
-        if curr_water.fill > MAX_FILL && curr_water.fill > 0 {
-            let flow_up = curr_water.fill - MAX_FILL;
-            curr_water.fill -= flow_up;
-            changes[x][y] -= flow_up;
-            changes[x][y - 1] += flow_up;
-        }
-    }
     match (state[0][1], state[2][1]) {
         (
             Cell::Water(WaterData { fill: left_fill }),
