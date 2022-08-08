@@ -1,5 +1,6 @@
 mod components;
 mod fly_camera;
+mod modify_grid;
 
 use bevy::{
     prelude::*,
@@ -7,20 +8,22 @@ use bevy::{
 };
 use components::{Cell, Simulation, WaterData, GRID_SIZE, MAX_FILL};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
+use modify_grid::modify_grid_system;
 use ndarray::Array2;
 use rand::{Rng, RngCore};
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_startup_system(add_grid)
+        .add_startup_system(add_grid_startup)
         .add_system(camera_2d_movement_system)
-        .add_system(update_texture)
-        .add_system(simulate)
+        .add_system(update_texture_system)
+        .add_system(simulate_system)
+        .add_system(modify_grid_system)
         .run();
 }
 
-fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands
         .spawn_bundle(Camera2dBundle::default())
         .insert(FlyCamera2d::default());
@@ -30,7 +33,13 @@ fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     for y in 0..GRID_SIZE {
         for x in 0..GRID_SIZE {
             let fill = (rng.gen::<f32>() * MAX_FILL as f32 / 2.) as i16;
-            data[[x as usize, y as usize]] = Cell::Water(WaterData { fill });
+            data[[x as usize, y as usize]] = Cell::Water(WaterData {
+                fill,
+                inertia_left: 0,
+                inertia_right: 0,
+                inertia_up: 0,
+                inertia_down: 0,
+            });
         }
     }
 
@@ -57,7 +66,7 @@ fn add_grid(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         });
 }
 
-fn update_texture(
+fn update_texture_system(
     mut images: ResMut<Assets<Image>>,
     mut query: Query<(&Simulation, &Handle<Image>)>,
 ) {
@@ -82,7 +91,7 @@ fn update_texture(
     }
 }
 
-fn simulate(mut query: Query<(&mut Simulation,)>) {
+fn simulate_system(mut query: Query<(&mut Simulation,)>) {
     let mut rng = rand::thread_rng();
     for (sim,) in &mut query {
         let sim: &mut Simulation = sim.into_inner();
@@ -166,16 +175,15 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
     } else {
         return changes;
     };
-
-    if let Cell::Water(WaterData { fill: _ }) = state[1][0] {
-        if curr_water.fill > MAX_FILL && curr_water.fill > 0 {
-            curr_water.fill -= 1;
-            changes[x][y] -= 1;
-            changes[x][y - 1] += 1;
-        }
+    if curr_water.fill <= 0 {
+        return changes;
     }
 
-    if let Cell::Water(WaterData { fill: below_fill }) = state[x][y + 1] {
+    // fall down
+    if let Cell::Water(WaterData {
+        fill: below_fill, ..
+    }) = state[x][y + 1]
+    {
         if below_fill < MAX_FILL && curr_water.fill > 0 {
             let flow_down = (MAX_FILL - below_fill).min(curr_water.fill);
             curr_water.fill -= flow_down;
@@ -186,26 +194,163 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
 
     match (state[0][1], state[2][1]) {
         (
-            Cell::Water(WaterData { fill: left_fill }),
-            Cell::Water(WaterData { fill: right_fill }),
+            Cell::Water(WaterData {
+                fill: left_fill, ..
+            }),
+            Cell::Water(WaterData {
+                fill: right_fill, ..
+            }),
         ) => {
             let left = rng.gen::<bool>();
 
-            if left {
-                flow_to_adjacent(left_fill, &mut curr_water, &mut changes, x, y, -1);
-                flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
-            } else {
-                flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
-                flow_to_adjacent(left_fill, &mut curr_water, &mut changes, x, y, -1);
+            // if left {
+            //     flow_to_adjacent(left_fill, &mut curr_water, &mut changes, x, y, -1);
+            //     flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
+            // } else {
+            //     flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
+            //     flow_to_adjacent(left_fill, &mut curr_water, &mut changes, x, y, -1);
+            // }
+
+            // flow to both sides
+            if left_fill < curr_water.fill && right_fill < curr_water.fill && curr_water.fill > 0 {
+                let expected_fill = (left_fill + right_fill + curr_water.fill) / 3;
+                // dbg!(left_fill, right_fill);
+                // dbg!(expected_fill);
+                let expected_fill_rem = (left_fill + right_fill + curr_water.fill) % 3;
+                // dbg!(expected_fill_rem);
+
+                let mut flow_left = expected_fill - left_fill;
+                let mut flow_right = expected_fill - right_fill;
+
+                if expected_fill_rem == 2 {
+                    flow_left += 1;
+                    flow_right += 1
+                }
+                if expected_fill == 1 {
+                    if left {
+                        flow_left += 1;
+                    } else {
+                        flow_right += 1;
+                    }
+                }
+
+                if flow_left < 0 {
+                    flow_left = 0;
+                }
+                if flow_right < 0 {
+                    flow_right = 0;
+                }
+
+                // dbg!(curr_water.fill, flow_left, flow_right);
+
+                curr_water.fill -= flow_left + flow_right;
+                changes[x][y] -= flow_left + flow_right;
+                changes[(x as i32 - 1) as usize][y] += flow_left;
+                changes[(x as i32 + 1) as usize][y] += flow_right;
+            }
+            // flow to left
+            else if left_fill < curr_water.fill
+                && right_fill > curr_water.fill
+                && curr_water.fill > 0
+            {
+                let expected_fill = (left_fill + curr_water.fill) / 2;
+                let expected_fill_rem = (left_fill + curr_water.fill) % 2;
+
+                let mut flow_left = expected_fill - left_fill;
+
+                flow_left += expected_fill_rem;
+
+                if flow_left < 0 {
+                    flow_left = 0;
+                }
+
+                curr_water.fill -= flow_left;
+                changes[x][y] -= flow_left;
+                changes[(x as i32 - 1) as usize][y] += flow_left;
+            }
+            // flow to left
+            else if left_fill > curr_water.fill
+                && right_fill < curr_water.fill
+                && curr_water.fill > 0
+            {
+                let expected_fill = (right_fill + curr_water.fill) / 2;
+                let expected_fill_rem = (right_fill + curr_water.fill) % 2;
+
+                let mut flow_right = expected_fill - right_fill;
+
+                flow_right += expected_fill_rem;
+
+                if flow_right < 0 {
+                    flow_right = 0;
+                }
+
+                curr_water.fill -= flow_right;
+                changes[x][y] -= flow_right;
+                changes[(x as i32 + 1) as usize][y] += flow_right;
             }
         }
-        (Cell::Water(WaterData { fill: left_fill }), Cell::Solid) => {
+        (
+            Cell::Water(WaterData {
+                fill: left_fill, ..
+            }),
+            Cell::Solid,
+        ) => {
             flow_to_adjacent(left_fill, &mut curr_water, &mut changes, x, y, -1);
         }
-        (Cell::Solid, Cell::Water(WaterData { fill: right_fill })) => {
+        (
+            Cell::Solid,
+            Cell::Water(WaterData {
+                fill: right_fill, ..
+            }),
+        ) => {
             flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
         }
         (Cell::Solid, Cell::Solid) => {}
+    }
+
+    // bubble up because of pressure
+    if let Cell::Water(WaterData {
+        fill: above_fill, ..
+    }) = state[x][y - 1]
+    {
+        if curr_water.fill > MAX_FILL && above_fill - curr_water.fill < -1 {
+            // dbg!(curr_water.fill, above_fill);
+            // let flow_up = curr_water.fill - above_fill - 1;
+            let flow_up = 1;
+            curr_water.fill -= flow_up;
+            changes[x][y] -= flow_up;
+            changes[x][y - 1] += flow_up;
+        }
+    }
+
+    // pressure below
+    if let Cell::Water(WaterData {
+        fill: below_fill, ..
+    }) = state[x][y + 1]
+    {
+        // dbg!(curr_water.fill, below_fill);
+        if curr_water.fill >= MAX_FILL
+            && below_fill >= MAX_FILL
+            && curr_water.fill - below_fill >= 0
+        {
+            // dbg!("dddd", curr_water.fill, below_fill);
+            curr_water.fill -= 1;
+            changes[x][y] -= 1;
+            changes[x][y + 1] += 1;
+        }
+    }
+
+    // fall down because of pressure
+    if let Cell::Water(WaterData {
+        fill: below_fill, ..
+    }) = state[x][y + 1]
+    {
+        if below_fill >= MAX_FILL && curr_water.fill >= MAX_FILL && curr_water.fill > below_fill {
+            let flow_down = curr_water.fill - below_fill;
+            curr_water.fill -= flow_down;
+            changes[x][y] -= flow_down;
+            changes[x][y + 1] += flow_down;
+        }
     }
 
     changes
