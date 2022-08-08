@@ -32,9 +32,8 @@ fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut rng = rand::thread_rng();
     for y in 0..GRID_SIZE {
         for x in 0..GRID_SIZE {
-            let fill = (rng.gen::<f32>() * MAX_FILL as f32 / 2.) as i16;
             data[[x as usize, y as usize]] = Cell::Water(WaterData {
-                fill,
+                fill: 0,
                 inertia_horiz: 0,
                 inertia_vert: 0,
             });
