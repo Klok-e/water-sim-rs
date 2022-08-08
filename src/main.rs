@@ -35,10 +35,8 @@ fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             let fill = (rng.gen::<f32>() * MAX_FILL as f32 / 2.) as i16;
             data[[x as usize, y as usize]] = Cell::Water(WaterData {
                 fill,
-                inertia_left: 0,
-                inertia_right: 0,
-                inertia_up: 0,
-                inertia_down: 0,
+                inertia_horiz: 0,
+                inertia_vert: 0,
             });
         }
     }
@@ -134,8 +132,26 @@ fn simulate_system(mut query: Query<(&mut Simulation,)>) {
                         if let Some(water) =
                             sim.double_buffer[[pos_x as usize, pos_y as usize]].water_mut()
                         {
-                            water.fill += changes[(xx + 1) as usize][(yy + 1) as usize];
-
+                            let change = changes[(xx + 1) as usize][(yy + 1) as usize];
+                            water.fill += change;
+                            if change != 0 {
+                                if xx < 0 {
+                                    water.inertia_horiz -= change;
+                                }
+                                if xx > 0 {
+                                    water.inertia_horiz += change;
+                                }
+                                if yy < 0 {
+                                    water.inertia_vert -= change;
+                                }
+                                if yy > 0 {
+                                    water.inertia_vert += change;
+                                }
+                                if xx == 0 && yy == 0 {
+                                    water.inertia_horiz = 0;
+                                    water.inertia_vert = 0;
+                                }
+                            }
                             assert!(water.fill >= 0);
                         }
                     }
@@ -177,6 +193,40 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
     };
     if curr_water.fill <= 0 {
         return changes;
+    }
+
+    // move by inertia first
+    if curr_water.inertia_horiz > 0 {
+        if let Cell::Water(WaterData { fill: _, .. }) = state[x + 1][y] {
+            let flow_right = (curr_water.inertia_horiz - 1).min(curr_water.fill);
+            curr_water.fill -= flow_right;
+            changes[x][y] -= flow_right;
+            changes[x + 1][y] += flow_right
+        }
+    }
+    if curr_water.inertia_horiz < 0 {
+        if let Cell::Water(WaterData { fill: _, .. }) = state[x - 1][y] {
+            let flow_left = ((-curr_water.inertia_horiz) - 1).min(curr_water.fill);
+            curr_water.fill -= flow_left;
+            changes[x][y] -= flow_left;
+            changes[x - 1][y] += flow_left
+        }
+    }
+    if curr_water.inertia_vert > 0 {
+        if let Cell::Water(WaterData { fill: _, .. }) = state[x][y + 1] {
+            let flow_down = (curr_water.inertia_vert - 1).min(curr_water.fill);
+            curr_water.fill -= flow_down;
+            changes[x][y] -= flow_down;
+            changes[x][y + 1] += flow_down
+        }
+    }
+    if curr_water.inertia_vert < 0 {
+        if let Cell::Water(WaterData { fill: _, .. }) = state[x][y - 1] {
+            let flow_up = ((-curr_water.inertia_vert) - 1).min(curr_water.fill);
+            curr_water.fill -= flow_up;
+            changes[x][y] -= flow_up;
+            changes[x][y - 1] += flow_up
+        }
     }
 
     // fall down
@@ -268,7 +318,7 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
                 changes[x][y] -= flow_left;
                 changes[(x as i32 - 1) as usize][y] += flow_left;
             }
-            // flow to left
+            // flow to right
             else if left_fill > curr_water.fill
                 && right_fill < curr_water.fill
                 && curr_water.fill > 0

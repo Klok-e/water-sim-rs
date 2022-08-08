@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use ndarray::Array2;
 
 pub const GRID_SIZE: u32 = 256;
-pub const MAX_FILL: i16 = 16;
+pub const MAX_FILL: i16 = 24;
 
 #[derive(Debug, Component)]
 pub struct Simulation {
@@ -53,8 +53,6 @@ impl Cell {
 #[derive(Debug, Clone, Copy)]
 pub struct WaterData {
     pub fill: i16,
-    pub inertia_left: i16,
-    pub inertia_right: i16,
-    pub inertia_up: i16,
-    pub inertia_down: i16,
+    pub inertia_horiz: i16,
+    pub inertia_vert: i16,
 }
