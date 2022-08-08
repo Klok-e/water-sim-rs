@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use ndarray::Array2;
 
 pub const GRID_SIZE: u32 = 512;
+pub const MAX_FILL: i16 = 32;
 
 #[derive(Debug, Component)]
 pub struct Simulation {
@@ -12,17 +13,19 @@ pub struct Simulation {
 #[derive(Debug, Clone, Copy)]
 pub enum Cell {
     Solid,
-    Water { fill: f32 },
+    Water(WaterData),
 }
 
 impl Cell {
     pub fn color(&self) -> Color {
         match self {
             Cell::Solid => todo!(),
-            Cell::Water { fill: water } => {
-                if water > &0.1 {
-                    let col = Vec3::new(0.49, 1.0, 0.83);
-                    let col = col.clamp(Vec3::splat(0.), Vec3::splat(1.));
+            Cell::Water(WaterData { fill: water }) => {
+                if water > &0 {
+                    let col_dark = Vec3::new(3. / 255., 2. / 255., 6. / 255.);
+                    let col_light = Vec3::new(54. / 255., 181. / 255., 245. / 255.);
+                    let interp = *water as f32 / (MAX_FILL as f32 * 1.2);
+                    let col = col_light.lerp(col_dark, interp);
                     let col = Color::rgb(col.x, col.y, col.z);
                     col
                 } else {
@@ -31,4 +34,23 @@ impl Cell {
             }
         }
     }
+
+    pub fn water(&self) -> Option<&WaterData> {
+        match self {
+            Cell::Water(water) => Some(water),
+            _ => None,
+        }
+    }
+
+    pub fn water_mut(&mut self) -> Option<&mut WaterData> {
+        match self {
+            Cell::Water(water) => Some(water),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct WaterData {
+    pub fill: i16,
 }
