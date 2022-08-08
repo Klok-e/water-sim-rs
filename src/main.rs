@@ -196,38 +196,38 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
     }
 
     // move by inertia first
-    if curr_water.inertia_horiz > 0 {
-        if let Cell::Water(WaterData { fill: _, .. }) = state[x + 1][y] {
-            let flow_right = (curr_water.inertia_horiz - 1).min(curr_water.fill);
-            curr_water.fill -= flow_right;
-            changes[x][y] -= flow_right;
-            changes[x + 1][y] += flow_right
-        }
-    }
-    if curr_water.inertia_horiz < 0 {
-        if let Cell::Water(WaterData { fill: _, .. }) = state[x - 1][y] {
-            let flow_left = ((-curr_water.inertia_horiz) - 1).min(curr_water.fill);
-            curr_water.fill -= flow_left;
-            changes[x][y] -= flow_left;
-            changes[x - 1][y] += flow_left
-        }
-    }
-    if curr_water.inertia_vert > 0 {
-        if let Cell::Water(WaterData { fill: _, .. }) = state[x][y + 1] {
-            let flow_down = (curr_water.inertia_vert - 1).min(curr_water.fill);
-            curr_water.fill -= flow_down;
-            changes[x][y] -= flow_down;
-            changes[x][y + 1] += flow_down
-        }
-    }
-    if curr_water.inertia_vert < 0 {
-        if let Cell::Water(WaterData { fill: _, .. }) = state[x][y - 1] {
-            let flow_up = ((-curr_water.inertia_vert) - 1).min(curr_water.fill);
-            curr_water.fill -= flow_up;
-            changes[x][y] -= flow_up;
-            changes[x][y - 1] += flow_up
-        }
-    }
+    // if curr_water.inertia_horiz > 0 {
+    //     if let Cell::Water(WaterData { fill: _, .. }) = state[x + 1][y] {
+    //         let flow_right = (curr_water.inertia_horiz - 1).min(curr_water.fill);
+    //         curr_water.fill -= flow_right;
+    //         changes[x][y] -= flow_right;
+    //         changes[x + 1][y] += flow_right
+    //     }
+    // }
+    // if curr_water.inertia_horiz < 0 {
+    //     if let Cell::Water(WaterData { fill: _, .. }) = state[x - 1][y] {
+    //         let flow_left = ((-curr_water.inertia_horiz) - 1).min(curr_water.fill);
+    //         curr_water.fill -= flow_left;
+    //         changes[x][y] -= flow_left;
+    //         changes[x - 1][y] += flow_left
+    //     }
+    // }
+    // if curr_water.inertia_vert > 0 {
+    //     if let Cell::Water(WaterData { fill: _, .. }) = state[x][y + 1] {
+    //         let flow_down = (curr_water.inertia_vert - 1).min(curr_water.fill);
+    //         curr_water.fill -= flow_down;
+    //         changes[x][y] -= flow_down;
+    //         changes[x][y + 1] += flow_down
+    //     }
+    // }
+    // if curr_water.inertia_vert < 0 {
+    //     if let Cell::Water(WaterData { fill: _, .. }) = state[x][y - 1] {
+    //         let flow_up = ((-curr_water.inertia_vert) - 1).min(curr_water.fill);
+    //         curr_water.fill -= flow_up;
+    //         changes[x][y] -= flow_up;
+    //         changes[x][y - 1] += flow_up
+    //     }
+    // }
 
     // fall down
     if let Cell::Water(WaterData {
