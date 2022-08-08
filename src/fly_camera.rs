@@ -9,7 +9,7 @@ use bevy::{
 /// # Example
 /// ```no_compile
 /// fn setup(mut commands: Commands) {
-///	  commands
+///   commands
 ///     .spawn(Camera2dBundle::default())
 ///     .with(FlyCamera2d::default());
 /// }

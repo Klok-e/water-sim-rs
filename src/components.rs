@@ -26,8 +26,8 @@ impl Cell {
                     let col_light = Vec3::new(54. / 255., 181. / 255., 245. / 255.);
                     let interp = *water as f32 / (MAX_FILL as f32 * 1.2);
                     let col = col_light.lerp(col_dark, interp);
-                    let col = Color::rgb(col.x, col.y, col.z);
-                    col
+
+                    Color::rgb(col.x, col.y, col.z)
                 } else {
                     Color::rgba(0., 0., 0., 0.)
                 }

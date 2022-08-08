@@ -4,7 +4,6 @@ mod fly_camera;
 use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
-    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
 };
 use components::{Cell, Simulation, WaterData, GRID_SIZE, MAX_FILL};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
@@ -64,7 +63,7 @@ fn update_texture(
 ) {
     for (sim, handle) in query.iter_mut() {
         let sim: &Simulation = sim;
-        let image = images.get_mut(&handle).unwrap();
+        let image = images.get_mut(handle).unwrap();
 
         let mut image_data = Vec::new();
         for y in 0..GRID_SIZE {
@@ -126,8 +125,7 @@ fn simulate(mut query: Query<(&mut Simulation,)>) {
                         if let Some(water) =
                             sim.double_buffer[[pos_x as usize, pos_y as usize]].water_mut()
                         {
-                            water.fill =
-                                (water.fill + changes[(xx + 1) as usize][(yy + 1) as usize]);
+                            water.fill += changes[(xx + 1) as usize][(yy + 1) as usize];
 
                             assert!(water.fill >= 0);
                         }
