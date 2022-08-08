@@ -152,9 +152,9 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
         if adjacent_fill < curr_water.fill && curr_water.fill > 0 {
             let can_flow = curr_water.fill - adjacent_fill / 2;
 
-            curr_water.fill -= can_flow;
-            changes[x][y] -= can_flow;
-            changes[(x as i32 + adj) as usize][y] += can_flow;
+            curr_water.fill -= 1;
+            changes[x][y] -= 1;
+            changes[(x as i32 + adj) as usize][y] += 1;
         }
     }
 
