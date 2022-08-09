@@ -6,7 +6,7 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use components::{Cell, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH, MAX_FILL, Simulation, WaterData};
+use components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH, MAX_FILL};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
 use modify_grid::modify_grid_system;
 use ndarray::Array2;
@@ -28,7 +28,10 @@ fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         .spawn_bundle(Camera2dBundle::default())
         .insert(FlyCamera2d::default());
 
-    let mut data = Array2::from_elem([GRID_SIZE_WIDTH as usize, GRID_SIZE_HEIGHT as usize], Cell::Solid);
+    let mut data = Array2::from_elem(
+        [GRID_SIZE_WIDTH as usize, GRID_SIZE_HEIGHT as usize],
+        Cell::Solid,
+    );
     let mut rng = rand::thread_rng();
     for y in 0..GRID_SIZE_HEIGHT {
         for x in 0..GRID_SIZE_WIDTH {
@@ -204,13 +207,9 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
                 changes[x][y] -= flow_to_dir;
                 changes[(x as i32 + dx) as usize][(y as i32 + dy) as usize] += flow_to_dir;
             }
-            (
-                _,
-                Cell::Water(WaterData {
-                    fill: opposite_dir_fill,
-                    ..
-                }),
-            ) if opposite_dir_fill >= MAX_FILL => {
+            (Cell::Water(WaterData { fill: dir_fill, .. }), Cell::Water(WaterData { .. }))
+                if dir_fill >= MAX_FILL =>
+            {
                 // else flow in opposite direction with velocity halved
                 let inertia = curr_water_speed / 2;
 
@@ -359,57 +358,57 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
         (Cell::Solid, Cell::Solid) => {}
     }
 
-    //  // move by inertia first
-    //  let curr_water_speed = curr_water.inertia_vert;
-    //  if curr_water_speed > 0 {
-    //      flow_by_velocity(
-    //          &mut curr_water,
-    //          curr_water_speed,
-    //          &state,
-    //          x,
-    //          y,
-    //          0,
-    //          1,
-    //          &mut changes,
-    //      );
-    //  }
-    //  if curr_water_speed < 0 {
-    //      flow_by_velocity(
-    //          &mut curr_water,
-    //          -curr_water_speed,
-    //          &state,
-    //          x,
-    //          y,
-    //          0,
-    //          -1,
-    //          &mut changes,
-    //      );
-    //  }
-    //  let curr_water_speed = curr_water.inertia_horiz;
-    //  if curr_water_speed > 0 {
-    //      flow_by_velocity(
-    //          &mut curr_water,
-    //          curr_water_speed,
-    //          &state,
-    //          x,
-    //          y,
-    //          1,
-    //          0,
-    //          &mut changes,
-    //      );
-    //  }
-    //  if curr_water_speed < 0 {
-    //      flow_by_velocity(
-    //          &mut curr_water,
-    //          -curr_water_speed,
-    //          &state,
-    //          x,
-    //          y,
-    //          -1,
-    //          0,
-    //          &mut changes,
-    //      );
-    //  }
+    // move by inertia first
+    let curr_water_speed = curr_water.inertia_vert;
+    if curr_water_speed > 0 {
+        flow_by_velocity(
+            &mut curr_water,
+            curr_water_speed,
+            &state,
+            x,
+            y,
+            0,
+            1,
+            &mut changes,
+        );
+    }
+    if curr_water_speed < 0 {
+        flow_by_velocity(
+            &mut curr_water,
+            -curr_water_speed,
+            &state,
+            x,
+            y,
+            0,
+            -1,
+            &mut changes,
+        );
+    }
+    let curr_water_speed = curr_water.inertia_horiz;
+    if curr_water_speed > 0 {
+        flow_by_velocity(
+            &mut curr_water,
+            curr_water_speed,
+            &state,
+            x,
+            y,
+            1,
+            0,
+            &mut changes,
+        );
+    }
+    if curr_water_speed < 0 {
+        flow_by_velocity(
+            &mut curr_water,
+            -curr_water_speed,
+            &state,
+            x,
+            y,
+            -1,
+            0,
+            &mut changes,
+        );
+    }
 
     // bubble up because of pressure
     if let Cell::Water(WaterData {
@@ -417,11 +416,9 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
     }) = state[x][y - 1]
     {
         if curr_water.fill > MAX_FILL && above_fill - curr_water.fill < -1 {
-            let flow_up = curr_water.fill - MAX_FILL;
-            dbg!(curr_water.fill,above_fill,flow_up);
-            curr_water.fill -= flow_up;
-            changes[x][y] -= flow_up;
-            changes[x][y - 1] += flow_up;
+            curr_water.fill -= 1;
+            changes[x][y] -= 1;
+            changes[x][y - 1] += 1;
         }
     }
 
