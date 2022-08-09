@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use ndarray::Array2;
 
-pub const GRID_SIZE: u32 = 256;
-pub const MAX_FILL: i16 = 24;
+pub const GRID_SIZE_WIDTH: u32 = 32;
+pub const GRID_SIZE_HEIGHT: u32 = 64;
+pub const MAX_FILL: i16 = 32;
 
 #[derive(Debug, Component)]
 pub struct Simulation {

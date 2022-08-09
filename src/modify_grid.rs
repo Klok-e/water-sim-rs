@@ -5,7 +5,7 @@ use bevy::{
     window::Windows,
 };
 
-use crate::components::{Cell, Simulation, WaterData, GRID_SIZE, MAX_FILL};
+use crate::components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT,GRID_SIZE_WIDTH, MAX_FILL};
 
 pub fn modify_grid_system(
     windows: Res<Windows>,
@@ -43,11 +43,11 @@ pub fn modify_grid_system(
 
     let (mut sim, sim_pos): (_, &Transform) = sim.single_mut();
     let sim: &mut Simulation = &mut *sim;
-    let sim_pos = sim_pos.translation.truncate() - GRID_SIZE as f32 / 2.;
+    let sim_pos = sim_pos.translation.truncate() - Vec2::from([GRID_SIZE_WIDTH as f32,GRID_SIZE_HEIGHT as f32]) / 2.;
     let relative = world_pos - sim_pos;
     let (index_x, index_y) = (
         relative.x.round() as i32,
-        GRID_SIZE as i32 - relative.y.round() as i32,
+        GRID_SIZE_HEIGHT as i32 - relative.y.round() as i32,
     );
 
     let brush_size = 10;
@@ -55,7 +55,7 @@ pub fn modify_grid_system(
     for y in -brush_size..=brush_size {
         for x in -brush_size..=brush_size {
             let (pos_x, pos_y) = (index_x + x, index_y + y);
-            if pos_x < 0 || pos_x >= GRID_SIZE as i32 || pos_y < 0 || pos_y >= GRID_SIZE as i32 {
+            if pos_x < 0 || pos_x >= GRID_SIZE_WIDTH as i32 || pos_y < 0 || pos_y >= GRID_SIZE_HEIGHT as i32 {
                 continue;
             }
 
