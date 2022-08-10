@@ -54,6 +54,4 @@ impl Cell {
 #[derive(Debug, Clone, Copy)]
 pub struct WaterData {
     pub fill: i16,
-    pub inertia_horiz: i16,
-    pub inertia_vert: i16,
 }

@@ -36,11 +36,7 @@ fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     for y in 0..GRID_SIZE_HEIGHT {
         for x in 0..GRID_SIZE_WIDTH {
             let fill = (rng.gen::<f32>() * MAX_FILL as f32 / 3.) as i16;
-            data[[x as usize, y as usize]] = Cell::Water(WaterData {
-                fill,
-                inertia_horiz: 0,
-                inertia_vert: 0,
-            });
+            data[[x as usize, y as usize]] = Cell::Water(WaterData { fill });
         }
     }
 
@@ -137,25 +133,6 @@ fn simulate_system(mut query: Query<(&mut Simulation,)>) {
                         {
                             let change = changes[(xx + 1) as usize][(yy + 1) as usize];
                             water.fill += change;
-                            if change != 0 {
-                                if xx < 0 {
-                                    water.inertia_horiz -= change;
-                                }
-                                if xx > 0 {
-                                    water.inertia_horiz += change;
-                                }
-                                if yy < 0 {
-                                    water.inertia_vert -= change;
-                                }
-                                if yy > 0 {
-                                    water.inertia_vert += change;
-                                }
-                                if xx == 0 && yy == 0 {
-                                    // dbg!(change, water.inertia_horiz,water.inertia_vert);
-                                    water.inertia_horiz = 0;
-                                    water.inertia_vert = 0;
-                                }
-                            }
                             assert!(water.fill >= 0);
                         }
                     }
@@ -200,19 +177,16 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
     }
 
     // fall down
-    if let Cell::Water(WaterData {
-        fill: below_fill, ..
-    }) = state[x][y + 1]
-    {
-        if below_fill < MAX_FILL && curr_water.fill > 0 {
-            let flow_down = (MAX_FILL - below_fill).min(curr_water.fill);
-            curr_water.fill -= flow_down;
-            changes[x][y] -= flow_down;
-            changes[x][y + 1] += flow_down;
-        }
+    fall_dir(&state, x, y, &mut curr_water, &mut changes, 0);
+
+    // fall down left right
+    if rng.gen::<bool>() {
+        fall_dir(&state, x, y, &mut curr_water, &mut changes, -1);
+    } else {
+        fall_dir(&state, x, y, &mut curr_water, &mut changes, 1);
     }
-    let remain_min = 5;
-    match (state[0][1], state[2][1]) {
+
+    match (state[x - 1][y], state[x + 1][y]) {
         (
             Cell::Water(WaterData {
                 fill: left_fill, ..
@@ -223,24 +197,28 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
         ) => {
             // flow to both sides
             if left_fill < curr_water.fill && right_fill < curr_water.fill && curr_water.fill > 0 {
-                let mut to_be_flowed_out =
-                    (curr_water.fill - left_fill.min(right_fill) + remain_min).min(curr_water.fill);
-                let left_is_min = left_fill < right_fill;
+                let avg = (left_fill + right_fill + curr_water.fill) / 3;
 
                 let mut flow_left = 0;
                 let mut flow_right = 0;
-                if left_is_min {
-                    flow_left += right_fill - left_fill;
-                    to_be_flowed_out -= right_fill - left_fill;
-                } else {
-                    flow_right += left_fill - right_fill;
-                    to_be_flowed_out -= left_fill - right_fill;
+
+                flow_left += avg - left_fill;
+                flow_right += avg - right_fill;
+
+                if flow_left < 0 {
+                    flow_left -= flow_left;
+                    flow_right -= flow_left;
+                }
+                if flow_right < 0 {
+                    flow_left -= flow_right;
+                    flow_right -= flow_right;
                 }
 
-                if curr_water.fill <= MAX_FILL {
-                    let rand_flow_left = rng.gen_range(0..=to_be_flowed_out);
-                    flow_left += rand_flow_left;
-                    flow_right += to_be_flowed_out - rand_flow_left;
+                let free_particles = curr_water.fill - avg - flow_left - flow_right;
+                if free_particles > 0 {
+                    let move_left = rng.gen_range(0..=free_particles);
+                    flow_left += move_left;
+                    flow_right += free_particles - move_left;
                 }
 
                 curr_water.fill -= flow_left + flow_right;
@@ -249,13 +227,12 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
                 changes[(x as i32 + 1) as usize][y] += flow_right;
             }
             // flow to left
-            else if left_fill <= curr_water.fill
-                && right_fill > curr_water.fill
+            else if left_fill < curr_water.fill
+                && right_fill >= curr_water.fill
                 && curr_water.fill > 0
             {
-                let to_be_flowed_out =
-                    (curr_water.fill - left_fill + remain_min).min(curr_water.fill);
-                let flow_left = to_be_flowed_out;
+                let diff = curr_water.fill - left_fill;
+                let flow_left = diff / 2 + diff % 2;
 
                 curr_water.fill -= flow_left;
                 changes[x][y] -= flow_left;
@@ -266,9 +243,8 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
                 && right_fill < curr_water.fill
                 && curr_water.fill > 0
             {
-                let to_be_flowed_out =
-                    (curr_water.fill - right_fill + remain_min).min(curr_water.fill);
-                let flow_right = to_be_flowed_out;
+                let diff = curr_water.fill - right_fill;
+                let flow_right = diff / 2 + diff % 2;
 
                 curr_water.fill -= flow_right;
                 changes[x][y] -= flow_right;
@@ -337,4 +313,25 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
     // }
 
     changes
+}
+
+fn fall_dir(
+    state: &[[Cell; 3]; 3],
+    x: usize,
+    y: usize,
+    curr_water: &mut WaterData,
+    changes: &mut [[i16; 3]; 3],
+    adj: i32,
+) {
+    if let Cell::Water(WaterData {
+        fill: below_fill, ..
+    }) = state[x + 1][y + 1]
+    {
+        if below_fill < MAX_FILL && curr_water.fill > 0 {
+            let flow_down = (MAX_FILL - below_fill).min(curr_water.fill);
+            curr_water.fill -= flow_down;
+            changes[x][y] -= flow_down;
+            changes[(x as i32 + adj) as usize][y + 1] += flow_down;
+        }
+    }
 }
