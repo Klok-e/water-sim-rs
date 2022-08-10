@@ -167,7 +167,7 @@ fn simulate_system(mut query: Query<(&mut Simulation,)>) {
     }
 }
 
-fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
+fn rule(state: [[Cell; 3]; 3], rng: &mut impl Rng) -> [[i16; 3]; 3] {
     fn flow_to_adjacent(
         adjacent_fill: i16,
         curr_water: &mut WaterData,
@@ -182,44 +182,6 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
             curr_water.fill -= can_flow;
             changes[x][y] -= can_flow;
             changes[(x as i32 + adj) as usize][y] += can_flow;
-        }
-    }
-    fn flow_by_velocity(
-        curr_water: &mut WaterData,
-        curr_water_speed: i16,
-        state: &[[Cell; 3]; 3],
-        x: usize,
-        y: usize,
-        dx: i32,
-        dy: i32,
-        changes: &mut [[i16; 3]; 3],
-    ) {
-        match (
-            state[(x as i32 + dx) as usize][(y as i32 + dy) as usize],
-            state[(x as i32 - dx) as usize][(y as i32 - dy) as usize],
-        ) {
-            (Cell::Water(WaterData { fill: dir_fill, .. }), _) if dir_fill < MAX_FILL => {
-                let inertia = curr_water_speed - 1;
-
-                let flow_to_dir = inertia.min(curr_water.fill).max(0);
-
-                curr_water.fill -= flow_to_dir;
-                changes[x][y] -= flow_to_dir;
-                changes[(x as i32 + dx) as usize][(y as i32 + dy) as usize] += flow_to_dir;
-            }
-            (Cell::Water(WaterData { fill: dir_fill, .. }), Cell::Water(WaterData { .. }))
-                if dir_fill >= MAX_FILL =>
-            {
-                // else flow in opposite direction with velocity halved
-                let inertia = curr_water_speed / 2;
-
-                let flow_to_dir = inertia.min(curr_water.fill).max(0);
-
-                curr_water.fill -= flow_to_dir;
-                changes[x][y] -= flow_to_dir;
-                changes[(x as i32 - dx) as usize][(y as i32 - dy) as usize] += flow_to_dir;
-            }
-            _ => (),
         }
     }
 
@@ -249,7 +211,7 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
             changes[x][y + 1] += flow_down;
         }
     }
-
+    let remain_min = 5;
     match (state[0][1], state[2][1]) {
         (
             Cell::Water(WaterData {
@@ -259,39 +221,27 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
                 fill: right_fill, ..
             }),
         ) => {
-            let left = rng.gen::<bool>();
-
             // flow to both sides
             if left_fill < curr_water.fill && right_fill < curr_water.fill && curr_water.fill > 0 {
-                let expected_fill = (left_fill + right_fill + curr_water.fill) / 3;
-                // dbg!(left_fill, right_fill);
-                // dbg!(expected_fill);
-                let expected_fill_rem = (left_fill + right_fill + curr_water.fill) % 3;
-                // dbg!(expected_fill_rem);
+                let mut to_be_flowed_out =
+                    (curr_water.fill - left_fill.min(right_fill) + remain_min).min(curr_water.fill);
+                let left_is_min = left_fill < right_fill;
 
-                let mut flow_left = expected_fill - left_fill;
-                let mut flow_right = expected_fill - right_fill;
-
-                if expected_fill_rem == 2 {
-                    flow_left += 1;
-                    flow_right += 1
-                }
-                if expected_fill_rem == 1 {
-                    if left {
-                        flow_left += 1;
-                    } else {
-                        flow_right += 1;
-                    }
+                let mut flow_left = 0;
+                let mut flow_right = 0;
+                if left_is_min {
+                    flow_left += right_fill - left_fill;
+                    to_be_flowed_out -= right_fill - left_fill;
+                } else {
+                    flow_right += left_fill - right_fill;
+                    to_be_flowed_out -= left_fill - right_fill;
                 }
 
-                if flow_left < 0 {
-                    flow_left = 0;
+                if curr_water.fill <= MAX_FILL {
+                    let rand_flow_left = rng.gen_range(0..=to_be_flowed_out);
+                    flow_left += rand_flow_left;
+                    flow_right += to_be_flowed_out - rand_flow_left;
                 }
-                if flow_right < 0 {
-                    flow_right = 0;
-                }
-
-                // dbg!(curr_water.fill, flow_left, flow_right);
 
                 curr_water.fill -= flow_left + flow_right;
                 changes[x][y] -= flow_left + flow_right;
@@ -303,16 +253,9 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
                 && right_fill > curr_water.fill
                 && curr_water.fill > 0
             {
-                let expected_fill = (left_fill + curr_water.fill) / 2;
-                let expected_fill_rem = (left_fill + curr_water.fill) % 2;
-
-                let mut flow_left = expected_fill - left_fill;
-
-                flow_left += expected_fill_rem;
-
-                if flow_left < 0 {
-                    flow_left = 0;
-                }
+                let to_be_flowed_out =
+                    (curr_water.fill - left_fill + remain_min).min(curr_water.fill);
+                let flow_left = to_be_flowed_out;
 
                 curr_water.fill -= flow_left;
                 changes[x][y] -= flow_left;
@@ -323,16 +266,9 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
                 && right_fill < curr_water.fill
                 && curr_water.fill > 0
             {
-                let expected_fill = (right_fill + curr_water.fill) / 2;
-                let expected_fill_rem = (right_fill + curr_water.fill) % 2;
-
-                let mut flow_right = expected_fill - right_fill;
-
-                flow_right += expected_fill_rem;
-
-                if flow_right < 0 {
-                    flow_right = 0;
-                }
+                let to_be_flowed_out =
+                    (curr_water.fill - right_fill + remain_min).min(curr_water.fill);
+                let flow_right = to_be_flowed_out;
 
                 curr_water.fill -= flow_right;
                 changes[x][y] -= flow_right;
@@ -356,58 +292,6 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
             flow_to_adjacent(right_fill, &mut curr_water, &mut changes, x, y, 1);
         }
         (Cell::Solid, Cell::Solid) => {}
-    }
-
-    // move by inertia first
-    let curr_water_speed = curr_water.inertia_vert;
-    if curr_water_speed > 0 {
-        flow_by_velocity(
-            &mut curr_water,
-            curr_water_speed,
-            &state,
-            x,
-            y,
-            0,
-            1,
-            &mut changes,
-        );
-    }
-    if curr_water_speed < 0 {
-        flow_by_velocity(
-            &mut curr_water,
-            -curr_water_speed,
-            &state,
-            x,
-            y,
-            0,
-            -1,
-            &mut changes,
-        );
-    }
-    let curr_water_speed = curr_water.inertia_horiz;
-    if curr_water_speed > 0 {
-        flow_by_velocity(
-            &mut curr_water,
-            curr_water_speed,
-            &state,
-            x,
-            y,
-            1,
-            0,
-            &mut changes,
-        );
-    }
-    if curr_water_speed < 0 {
-        flow_by_velocity(
-            &mut curr_water,
-            -curr_water_speed,
-            &state,
-            x,
-            y,
-            -1,
-            0,
-            &mut changes,
-        );
     }
 
     // bubble up because of pressure
@@ -440,17 +324,17 @@ fn rule(state: [[Cell; 3]; 3], rng: &mut impl RngCore) -> [[i16; 3]; 3] {
     }
 
     // fall down because of pressure
-    if let Cell::Water(WaterData {
-        fill: below_fill, ..
-    }) = state[x][y + 1]
-    {
-        if below_fill >= MAX_FILL && curr_water.fill >= MAX_FILL && curr_water.fill > below_fill {
-            let flow_down = curr_water.fill - below_fill;
-            curr_water.fill -= flow_down;
-            changes[x][y] -= flow_down;
-            changes[x][y + 1] += flow_down;
-        }
-    }
+    // if let Cell::Water(WaterData {
+    //     fill: below_fill, ..
+    // }) = state[x][y + 1]
+    // {
+    //     if below_fill >= MAX_FILL && curr_water.fill >= MAX_FILL && curr_water.fill > below_fill {
+    //         let flow_down = curr_water.fill - below_fill;
+    //         curr_water.fill -= flow_down;
+    //         changes[x][y] -= flow_down;
+    //         changes[x][y + 1] += flow_down;
+    //     }
+    // }
 
     changes
 }
