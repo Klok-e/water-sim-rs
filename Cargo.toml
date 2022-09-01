@@ -9,6 +9,7 @@ edition = "2021"
 bevy = { version = "0.8", features = ["dynamic"] }
 rand = "0.8"
 ndarray = "0.15"
+line_drawing = "1.0.0"
 
 [profile.dev.package."*"]
 opt-level = 3
