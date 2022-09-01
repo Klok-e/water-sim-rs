@@ -24,7 +24,7 @@ impl Cell {
             Cell::Water(WaterData { .. }) => {
                 let col_dark = Vec3::new(3. / 255., 2. / 255., 6. / 255.);
                 let col_light = Vec3::new(54. / 255., 181. / 255., 245. / 255.);
-                let interp = 10. as f32 / (MAX_FILL as f32 * 3.);
+                let interp = 10_f32 / (MAX_FILL as f32 * 3.);
                 let col = col_light.lerp(col_dark, interp);
 
                 Color::rgb(col.x, col.y, col.z)

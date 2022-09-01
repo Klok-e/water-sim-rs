@@ -5,7 +5,7 @@ use bevy::{
     window::Windows,
 };
 
-use crate::components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH, MAX_FILL};
+use crate::components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH};
 
 pub fn modify_grid_system(
     windows: Res<Windows>,
@@ -42,7 +42,7 @@ pub fn modify_grid_system(
     let world_pos: Vec2 = world_pos.truncate();
 
     let (mut sim, sim_pos): (_, &Transform) = sim.single_mut();
-    let sim: &mut Simulation = &mut *sim;
+    let sim: &mut Simulation = &mut sim;
     let sim_pos = sim_pos.translation.truncate()
         - Vec2::from([GRID_SIZE_WIDTH as f32, GRID_SIZE_HEIGHT as f32]) / 2.;
     let relative = world_pos - sim_pos;

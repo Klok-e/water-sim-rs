@@ -6,13 +6,13 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH, MAX_FILL};
+use components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
 use line_drawing::Supercover;
 use modify_grid::modify_grid_system;
 use ndarray::Array2;
 use rand::seq::SliceRandom;
-use rand::{Rng, RngCore};
+use rand::Rng;
 
 fn main() {
     App::new()
@@ -96,8 +96,7 @@ fn simulate_system(mut query: Query<(&mut Simulation,)>) {
     for (sim,) in &mut query {
         let sim: &mut Simulation = sim.into_inner();
         let mut coords = (0..GRID_SIZE_HEIGHT as i32)
-            .map(|x| (0..GRID_SIZE_HEIGHT as i32).map(move |y| (x, y)))
-            .flatten()
+            .flat_map(|x| (0..GRID_SIZE_HEIGHT as i32).map(move |y| (x, y)))
             .collect::<Vec<(i32, i32)>>();
         coords.shuffle(&mut rng);
 
