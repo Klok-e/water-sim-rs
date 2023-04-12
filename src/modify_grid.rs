@@ -2,13 +2,13 @@ use bevy::{
     input::Input,
     math::Vec2,
     prelude::{Camera, GlobalTransform, MouseButton, Query, Res, Transform},
-    window::Windows,
+    window::Window,
 };
 
 use crate::components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH};
 
 pub fn modify_grid_system(
-    windows: Res<Windows>,
+    windows: Query<&Window>,
     mouse_buttons: Res<Input<MouseButton>>,
     camera: Query<(&Camera, &GlobalTransform)>,
     mut sim: Query<(&mut Simulation, &Transform)>,
@@ -19,7 +19,7 @@ pub fn modify_grid_system(
 
     let (camera, camera_transform) = camera.single();
 
-    let wnd = windows.get_primary().unwrap();
+    let wnd = windows.get_single().unwrap();
     let screen_pos = if let Some(pos) = wnd.cursor_position() {
         pos
     } else {
@@ -27,7 +27,7 @@ pub fn modify_grid_system(
     };
 
     // get the size of the window
-    let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
+    let window_size = Vec2::new(wnd.width(), wnd.height());
 
     // convert screen position [0..resolution] to ndc [-1..1] (gpu coordinates)
     let ndc = (screen_pos / window_size) * 2.0 - Vec2::ONE;

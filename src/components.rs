@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use ndarray::Array2;
 
-pub const GRID_SIZE_WIDTH: u32 = 200;
-pub const GRID_SIZE_HEIGHT: u32 = 200;
+pub const GRID_SIZE_WIDTH: u32 = 400;
+pub const GRID_SIZE_HEIGHT: u32 = 400;
 pub const MAX_FILL: i16 = 32;
 
 #[derive(Debug, Component)]

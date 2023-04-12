@@ -1,5 +1,6 @@
 mod components;
 mod fly_camera;
+mod fps_system;
 mod modify_grid;
 
 use bevy::{
@@ -8,6 +9,7 @@ use bevy::{
 };
 use components::{Cell, Simulation, WaterData, GRID_SIZE_HEIGHT, GRID_SIZE_WIDTH};
 use fly_camera::{camera_2d_movement_system, FlyCamera2d};
+use fps_system::DebugUiBundle;
 use line_drawing::Supercover;
 use modify_grid::modify_grid_system;
 use ndarray::Array2;
@@ -17,6 +19,7 @@ use rand::Rng;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(DebugUiBundle)
         .add_startup_system(add_grid_startup)
         .add_system(camera_2d_movement_system)
         .add_system(update_texture_system)
@@ -27,7 +30,7 @@ fn main() {
 
 fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands
-        .spawn_bundle(Camera2dBundle::default())
+        .spawn(Camera2dBundle::default())
         .insert(FlyCamera2d::default());
 
     let mut data = Array2::from_elem(
@@ -59,7 +62,7 @@ fn add_grid_startup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     let generated = images.add(img);
     commands
-        .spawn_bundle(SpriteBundle {
+        .spawn(SpriteBundle {
             texture: generated,
             ..default()
         })
@@ -179,7 +182,7 @@ fn rule(mut state: SimSquareRef<'_>, rng: &mut impl Rng) {
 
 fn empty_on_line(x: i32, y: i32, vel_x: i32, vel_y: i32, state: &SimSquareRef) -> (i32, i32) {
     let mut prev_cell = (x, y);
-    for p @ (p_x, p_y) in Supercover::new((x, y), (x + vel_x as i32, y + vel_y as i32)).skip(1) {
+    for p @ (p_x, p_y) in Supercover::new((x, y), (x + vel_x, y + vel_y)).skip(1) {
         if let Cell::Air = state.get(p_x, p_y) {
             prev_cell = p;
         } else {
@@ -197,7 +200,7 @@ pub struct SimSquareRef<'a> {
 }
 
 impl<'a> SimSquareRef<'a> {
-    pub fn get<'b>(&'b self, x: i32, y: i32) -> Cell {
+    pub fn get(&self, x: i32, y: i32) -> Cell {
         assert!(x < SIM_SQUARE_SIZE as i32);
         assert!(y < SIM_SQUARE_SIZE as i32);
         let x = self.start_coord_x + x;
@@ -209,7 +212,7 @@ impl<'a> SimSquareRef<'a> {
         }
     }
 
-    pub fn get_mut<'b>(&'b mut self, x: i32, y: i32) -> Option<&'b mut Cell> {
+    pub fn get_mut(&mut self, x: i32, y: i32) -> Option<&mut Cell> {
         assert!(x < SIM_SQUARE_SIZE as i32);
         assert!(y < SIM_SQUARE_SIZE as i32);
         let x = self.start_coord_x + x;
